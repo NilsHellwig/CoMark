@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - working-directory: backend
+        run: uv sync --frozen
+      - name: Lint
+        working-directory: backend
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Types
+        working-directory: backend
+        run: uv run mypy app
+      - name: Tests
+        working-directory: backend
+        run: uv run pytest --cov --cov-report=term-missing
+      - name: OpenAPI is in sync
+        working-directory: backend
+        run: |
+          uv run python -m scripts.export_openapi
+          git diff --exit-code ../frontend/openapi.json
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - name: Generated SDK is in sync
+        working-directory: frontend
+        run: |
+          npm run gen:api
+          git diff --exit-code src/lib/api/generated
+      - name: Lint + typecheck
+        working-directory: frontend
+        run: npm run lint && npm run typecheck
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    # `-f docker-compose.yml` skips docker-compose.override.yml (dev bind-mounts
+    # would create root-owned dirs on the runner). This runs the production images.
+    env:
+      COMPOSE_FILE: docker-compose.yml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Start the stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait
+      - name: Playwright
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:8896
+        run: npx playwright test
+      - if: failure()
+        run: docker compose logs
+
+  # Deploy to Cloud Run — only on push to main, only after all tests pass.
+  deploy:
+    needs: [backend, frontend, e2e]
+    # Skipped (not failed) until GCP is configured — see docs/deploy-gcp.md.
+    if: github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/comark
+      SHA: ${{ github.sha }}
+      REGION: ${{ vars.GCP_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      - name: Build & push images
+        run: |
+          docker build --target runtime -t "$REGISTRY/backend:$SHA" backend
+          docker build --target runtime \
+            --build-arg NEXT_PUBLIC_API_BASE_URL= \
+            --build-arg NEXT_PUBLIC_WS_BASE_URL= \
+            --build-arg API_URL=http://localhost:8897 \
+            --build-arg NEXT_PUBLIC_GOOGLE_ENABLED="${{ vars.GOOGLE_ENABLED || 'false' }}" \
+            -t "$REGISTRY/frontend:$SHA" frontend
+          docker build -f infra/caddy.Dockerfile -t "$REGISTRY/caddy:$SHA" .
+          docker push "$REGISTRY/backend:$SHA"
+          docker push "$REGISTRY/frontend:$SHA"
+          docker push "$REGISTRY/caddy:$SHA"
+          # Mirror redis into Artifact Registry from this amd64 runner (a laptop
+          # `docker pull` would push the wrong architecture → "exec format error").
+          docker buildx imagetools create --tag "$REGISTRY/redis:8-alpine" redis:8-alpine
+
+      - name: Run database migrations (against Neon)
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+
+      - name: Deploy to Cloud Run
+        env:
+          PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+        run: |
+          URL="${PUBLIC_URL:-https://comark.invalid}"
+          sed -e "s|__REGION__|$REGION|g" \
+              -e "s|__IMAGE_CADDY__|$REGISTRY/caddy:$SHA|g" \
+              -e "s|__IMAGE_BACKEND__|$REGISTRY/backend:$SHA|g" \
+              -e "s|__IMAGE_FRONTEND__|$REGISTRY/frontend:$SHA|g" \
+              -e "s|__IMAGE_REDIS__|$REGISTRY/redis:8-alpine|g" \
+              -e "s|__PUBLIC_BASE_URL__|$URL|g" \
+              infra/cloudrun-service.yaml > /tmp/svc.yaml
+          gcloud run services replace /tmp/svc.yaml --region "$REGION" --quiet
+          gcloud run services add-iam-policy-binding comark --region "$REGION" \
+            --member=allUsers --role=roles/run.invoker --quiet
+
+          REAL_URL="$(gcloud run services describe comark --region "$REGION" --format='value(status.url)')"
+          echo "### Deployed → $REAL_URL" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$REAL_URL" != "$PUBLIC_URL" ]; then
+            echo "::warning::First deploy — set repo variable PUBLIC_URL=$REAL_URL and push again so the backend bakes in its own base URL (share links, OAuth redirect)."
+          fi

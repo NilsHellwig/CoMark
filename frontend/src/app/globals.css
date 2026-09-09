@@ -1,0 +1,166 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+}
+
+@theme {
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --shadow-soft:
+    0 1px 2px rgba(20, 20, 20, 0.04), 0 8px 24px -12px rgba(20, 20, 20, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Prose surface inside the collaborative editor. */
+.comark-prose {
+  color: var(--ink);
+  line-height: 1.7;
+}
+.comark-prose:focus {
+  outline: none;
+}
+.comark-prose > * + * {
+  margin-top: 0.9em;
+}
+.comark-prose h1 {
+  font-size: 1.7rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 1.6em;
+}
+.comark-prose h2 {
+  font-size: 1.32rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 1.5em;
+}
+.comark-prose h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 1.3em;
+}
+.comark-prose p:first-child,
+.comark-prose h1:first-child,
+.comark-prose h2:first-child {
+  margin-top: 0;
+}
+.comark-prose ul,
+.comark-prose ol {
+  padding-left: 1.4em;
+}
+.comark-prose ul {
+  list-style: disc;
+}
+.comark-prose ol {
+  list-style: decimal;
+}
+.comark-prose li > p {
+  margin: 0;
+}
+.comark-prose blockquote {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 1em;
+  color: var(--ink-soft);
+}
+.comark-prose code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--surface-sunken);
+  padding: 0.12em 0.36em;
+  border-radius: var(--radius-sm);
+}
+.comark-prose pre {
+  background: var(--surface-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9em 1em;
+  overflow-x: auto;
+}
+.comark-prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+.comark-prose a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.comark-prose hr {
+  border: none;
+  border-top: 1px solid var(--line);
+}
+.comark-prose[data-serif="true"] {
+  font-family: var(--font-serif);
+  font-size: 1.06rem;
+}
+
+/* Remote collaborator carets in the source editor (y-codemirror.next),
+   Overleaf / Google-Docs style: thin coloured caret with an always-on name tag. */
+.cm-ySelectionCaret {
+  border-left-width: 1.5px;
+  border-right-width: 1.5px;
+}
+.cm-ySelectionInfo {
+  opacity: 1 !important;
+  top: -1.5em !important;
+  border-radius: 3px;
+  padding: 1px 4px !important;
+  font-family: var(--font-sans) !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em;
+}
+
+.cm-editor {
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

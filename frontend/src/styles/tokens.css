@@ -1,0 +1,68 @@
+/* CoMark design tokens — Scandinavian minimalism.
+   One restrained accent, hairline borders, generous whitespace, near-flat elevation.
+   Every colour is defined here on :root and only *remapped* under dark. */
+
+:root {
+  --paper: #fafaf8;
+  --surface: #ffffff;
+  --surface-sunken: #f4f3ef;
+  --ink: #1a1a1a;
+  --ink-soft: #55524c;
+  --ink-faint: #8a867e;
+  --line: #e7e5df;
+  --line-strong: #d8d5cc;
+  --accent: #3b5b6b;
+  --accent-ink: #ffffff;
+  --accent-soft: #eef2f3;
+  --danger: #9a4a3f;
+  --ok: #4c6b54;
+
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --shadow: 0 1px 2px rgba(20, 20, 20, 0.04), 0 8px 24px -12px rgba(20, 20, 20, 0.12);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 20, 0.05);
+
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-serif: var(--font-newsreader), ui-serif, Georgia, "Times New Roman", serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #16161a;
+    --surface: #1c1c21;
+    --surface-sunken: #121215;
+    --ink: #ececec;
+    --ink-soft: #b4b1a9;
+    --ink-faint: #7c7a74;
+    --line: #2c2c33;
+    --line-strong: #3a3a42;
+    --accent: #7fa9bb;
+    --accent-ink: #10171b;
+    --accent-soft: #202b30;
+    --danger: #d18a7e;
+    --ok: #8fb897;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #16161a;
+  --surface: #1c1c21;
+  --surface-sunken: #121215;
+  --ink: #ececec;
+  --ink-soft: #b4b1a9;
+  --ink-faint: #7c7a74;
+  --line: #2c2c33;
+  --line-strong: #3a3a42;
+  --accent: #7fa9bb;
+  --accent-ink: #10171b;
+  --accent-soft: #202b30;
+  --danger: #d18a7e;
+  --ok: #8fb897;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+}

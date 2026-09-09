@@ -1,0 +1,28 @@
+# Auto-loaded by `docker compose` for local development: source bind-mounts + hot reload.
+services:
+  backend:
+    build:
+      target: test # dev deps available for `make test`
+    entrypoint: []
+    command:
+      - sh
+      - -c
+      - "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8897 --reload"
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    environment:
+      ENVIRONMENT: development
+
+  frontend:
+    build:
+      target: dev
+    command: ["npm", "run", "dev"]
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NODE_ENV: development
+      PORT: "8896"
+      WATCHPACK_POLLING: "true"

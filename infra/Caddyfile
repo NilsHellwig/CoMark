@@ -1,0 +1,20 @@
+# Ingress for the single multi-container Cloud Run service.
+# Cloud Run sets $PORT (8080). One origin → same-site cookies, WS, OAuth all work.
+:{$PORT:8080}
+
+# API + Swagger → FastAPI. reverse_proxy upgrades WebSockets (/api/v1/collab) automatically.
+@backend path /api/v1/* /docs /openapi.json
+handle @backend {
+	reverse_proxy localhost:8897
+}
+
+# Everything else → Next.js.
+handle {
+	reverse_proxy localhost:8896
+}
+
+# Access logs to stdout (Cloud Logging picks them up).
+log {
+	output stdout
+	format console
+}

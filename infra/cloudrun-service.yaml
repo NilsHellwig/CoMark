@@ -1,0 +1,132 @@
+# Single multi-container Cloud Run service for CoMark.
+# The deploy workflow substitutes the __PLACEHOLDER__ tokens and runs:
+#   gcloud run services replace infra/cloudrun-service.yaml --region <region>
+#
+# Containers: caddy (ingress) → backend + frontend; redis is an ephemeral cache.
+# Pinned to one instance (Yjs rooms live in-process); scales to zero when idle.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: comark
+  labels:
+    cloud.googleapis.com/location: __REGION__
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "true"
+        run.googleapis.com/startup-cpu-boost: "true"
+        # caddy starts only after backend + frontend pass their startup probes.
+        run.googleapis.com/container-dependencies: '{"caddy":["backend","frontend"]}'
+    spec:
+      timeoutSeconds: 3600
+      containerConcurrency: 200
+      containers:
+        # --- ingress -----------------------------------------------------------
+        # Per-container CPU must be in [0.08, 1] and sum to the billed instance
+        # size: 1 vCPU / 1536Mi total.
+        - name: caddy
+          image: __IMAGE_CADDY__
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 30
+
+        # --- FastAPI + in-process Yjs rooms ----------------------------------
+        - name: backend
+          image: __IMAGE_BACKEND__
+          env:
+            - name: ENVIRONMENT
+              value: production
+            - name: RUN_MIGRATIONS
+              value: "0"
+            - name: REDIS_HOST
+              value: localhost
+            - name: PUBLIC_BASE_URL
+              value: __PUBLIC_BASE_URL__
+            - name: BACKEND_CORS_ORIGINS
+              value: __PUBLIC_BASE_URL__
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: comark-secret-key
+                  key: latest
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: comark-database-url
+                  key: latest
+            - name: GOOGLE_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: comark-google-client-id
+                  key: latest
+            - name: GOOGLE_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: comark-google-client-secret
+                  key: latest
+          resources:
+            limits:
+              cpu: 550m
+              memory: 832Mi
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8897
+            periodSeconds: 5
+            failureThreshold: 40
+
+        # --- Next.js standalone --------------------------------------------
+        - name: frontend
+          image: __IMAGE_FRONTEND__
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "8896"
+            - name: HOSTNAME
+              value: 0.0.0.0
+            - name: API_URL
+              value: http://localhost:8897
+          resources:
+            limits:
+              cpu: 250m
+              memory: 448Mi
+          startupProbe:
+            tcpSocket:
+              port: 8896
+            periodSeconds: 5
+            failureThreshold: 40
+
+        # --- ephemeral cache ------------------------------------------------
+        - name: redis
+          image: __IMAGE_REDIS__
+          args:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --maxmemory
+            - 100mb
+            - --maxmemory-policy
+            - allkeys-lru
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+  traffic:
+    - percent: 100
+      latestRevision: true
